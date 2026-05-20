@@ -59,12 +59,17 @@ local function CollectRareScannerEntries()
     local isRare     = (category == "RARE")
     local isRareLoot = (category == "RARE_LOOT")
 
+    local objectives = {}
+    if horizon.GetDB("rs_showCoords", true) and alert.x and alert.y then
+        objectives = { { text = ("%.1f, %.1f"):format(alert.x * 100, alert.y * 100), finished = false } }
+    end
+
     return {
         {
             entryKey       = "rarescanner:" .. tostring(alert.entityID),
             questID        = nil,
             title          = alert.name,
-            objectives     = {},
+            objectives     = objectives,
             color          = color,
             category       = category,
             isComplete     = false,

@@ -95,6 +95,10 @@ local function HookScannerButton()
             zoneName  = zoneName,
         }
 
+        if horizon.GetDB("rs_autoWaypoint", false) and horizon.SetRareWaypoint then
+            pcall(horizon.SetRareWaypoint, { title = name, vignetteMapID = mapID, vignetteX = x, vignetteY = y })
+        end
+
         if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
     end)
 
