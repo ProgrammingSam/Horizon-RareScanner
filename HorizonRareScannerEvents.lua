@@ -1,8 +1,8 @@
 --[[
     Horizon - RareScanner - Events
     Hooks into the RareScanner scanner button (RARESCANNER_BUTTON) once it is
-    loaded, tracks the active alert, and asks HorizonSuite to refresh the
-    Focus tracker whenever an alert appears or disappears.
+    loaded, tracks an ordered queue of active alerts, and asks HorizonSuite to
+    refresh the Focus tracker whenever an alert appears or disappears.
 ]]
 
 local horizon = _G.HorizonSuite
@@ -16,11 +16,39 @@ if not horizon or not RS then return end
 local RS_BUTTON_NAME = "RARESCANNER_BUTTON"
 
 -- ============================================================================
+-- ALERT QUEUE
+-- ============================================================================
+
+-- alertQueue[entityID] = alertData table
+-- alertOrder           = ordered list of entityIDs (insertion order)
+-- alertIndex           = 1-based index into alertOrder for current display
+RS.alertQueue = {}
+RS.alertOrder = {}
+RS.alertIndex = 0
+
+-- ============================================================================
+-- NAVIGATION
+-- ============================================================================
+
+RS.NavigatePrev = function()
+    if #RS.alertOrder == 0 then return end
+    RS.alertIndex = RS.alertIndex - 1
+    if RS.alertIndex < 1 then RS.alertIndex = #RS.alertOrder end
+    if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+end
+
+RS.NavigateNext = function()
+    if #RS.alertOrder == 0 then return end
+    RS.alertIndex = RS.alertIndex + 1
+    if RS.alertIndex > #RS.alertOrder then RS.alertIndex = 1 end
+    if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+end
+
+-- ============================================================================
 -- ALERT HELPERS
 -- ============================================================================
 
 --- Resolve a 0..1 map position for entityID from the live vignette list.
---- Falls back to nil if no matching vignette is found.
 --- @param entityID number
 --- @param mapID number|nil
 --- @return number|nil x, number|nil y
@@ -69,7 +97,7 @@ local function HookScannerButton()
     if not btn then return end
     hooked = true
 
-    -- Fired each time RareScanner pops an alert (including navigation).
+    -- Fired each time RareScanner pops an alert (including its own navigation).
     hooksecurefunc(btn, "ShowButton", function(self)
         if not RS.GetDB("enabled", true) then return end
 
@@ -77,26 +105,45 @@ local function HookScannerButton()
         local name     = self.name
         if not entityID or not name then return end
 
-        -- Deduplicate: skip if same entity is already the active alert.
-        if RS.activeAlert and RS.activeAlert.entityID == entityID then return end
-
         local mapID    = self.mapID
                          or (C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player"))
         local x, y    = ResolveVignettePosition(entityID, mapID)
         local zoneName = ResolveZoneName(mapID)
 
-        RS.activeAlert = {
-            entityID  = entityID,
-            name      = name,
-            atlasName = self.atlasName,
-            mapID     = mapID,
-            x         = x,
-            y         = y,
-            zoneName  = zoneName,
-        }
+        -- Check if already queued (dedup by entityID).
+        local existingIdx
+        for i, eid in ipairs(RS.alertOrder) do
+            if eid == entityID then existingIdx = i; break end
+        end
 
-        if horizon.GetDB("rs_autoWaypoint", false) and horizon.SetRareWaypoint then
-            pcall(horizon.SetRareWaypoint, { title = name, vignetteMapID = mapID, vignetteX = x, vignetteY = y })
+        if existingIdx then
+            -- Update existing alert and navigate to it.
+            local alert = RS.alertQueue[entityID]
+            alert.name      = name
+            alert.atlasName = self.atlasName
+            alert.mapID     = mapID
+            alert.x         = x
+            alert.y         = y
+            alert.zoneName  = zoneName
+            RS.alertIndex   = existingIdx
+        else
+            RS.alertQueue[entityID] = {
+                entityID  = entityID,
+                name      = name,
+                atlasName = self.atlasName,
+                mapID     = mapID,
+                x         = x,
+                y         = y,
+                zoneName  = zoneName,
+                loot      = {},
+            }
+            RS.alertOrder[#RS.alertOrder + 1] = entityID
+            RS.alertIndex = #RS.alertOrder
+        end
+
+        local alert = RS.alertQueue[RS.alertOrder[RS.alertIndex]]
+        if horizon.GetDB("rs_autoWaypoint", false) and horizon.SetRareWaypoint and alert then
+            pcall(horizon.SetRareWaypoint, { title = alert.name, vignetteMapID = alert.mapID, vignetteX = alert.x, vignetteY = alert.y })
         end
 
         if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
@@ -104,11 +151,37 @@ local function HookScannerButton()
 
     -- Fired when the user dismisses the alert or its auto-hide timer expires.
     hooksecurefunc(btn, "HideButton", function()
-        if RS.activeAlert then
-            RS.activeAlert = nil
+        if #RS.alertOrder > 0 then
+            RS.alertQueue = {}
+            RS.alertOrder = {}
+            RS.alertIndex = 0
             if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
         end
     end)
+
+    -- Loot bar hooks: capture item IDs as they load asynchronously.
+    local pool = btn.LootBar and btn.LootBar.itemFramesPool
+    if pool then
+        if pool.InitItemList then
+            hooksecurefunc(pool, "InitItemList", function(_, _, entityID)
+                if entityID and RS.alertQueue[entityID] then
+                    RS.alertQueue[entityID].loot = {}
+                end
+            end)
+        end
+        if pool.UpdateCacheItem then
+            hooksecurefunc(pool, "UpdateCacheItem", function(_, itemID, entityID)
+                if not itemID or not entityID then return end
+                if not RS.alertQueue[entityID] then return end
+                local loot = RS.alertQueue[entityID].loot
+                for _, id in ipairs(loot) do
+                    if id == itemID then return end
+                end
+                loot[#loot + 1] = itemID
+                if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+            end)
+        end
+    end
 end
 
 -- ============================================================================
