@@ -1,0 +1,14 @@
+## Interface: 120005
+## Title: Horizon - RareScanner
+## Notes: Integrates RareScanner alerts into the Horizon Focus tracker.
+## Author: ProgrammingSam
+## Version: 1.0.0
+## Dependencies: HorizonSuite
+## OptionalDeps: RareScanner
+## X-Curse-Project-ID:
+## X-Wago-ID:
+
+HorizonRareScanner.lua
+HorizonRareScannerProvider.lua
+HorizonRareScannerEvents.lua
+HorizonRareScannerModule.lua
