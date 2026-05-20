@@ -2,6 +2,8 @@
     Horizon - RareScanner - Module
     Registers this addon as a HorizonSuite module so it appears in the
     Modules list and respects the global enable/disable toggle.
+    The provider reads horizon:IsModuleEnabled("rarescanner") directly,
+    so no separate DB flag is needed here.
 ]]
 
 local horizon = _G.HorizonSuite
@@ -22,19 +24,19 @@ horizon:RegisterModule("rarescanner", {
     end,
 
     OnEnable = function()
-        RS.SetDB("enabled", true)
-        -- If an alert was already active before the module was enabled, refresh now.
+        -- If an alert was already active before the module was enabled, refresh.
         if RS.activeAlert and horizon.ScheduleRefresh then
             horizon.ScheduleRefresh()
         end
     end,
 
     OnDisable = function()
-        RS.SetDB("enabled", false)
         -- Clear any active alert from the tracker immediately.
         if RS.activeAlert then
             RS.activeAlert = nil
-            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+        end
+        if horizon.ScheduleRefresh then
+            horizon.ScheduleRefresh()
         end
     end,
 })

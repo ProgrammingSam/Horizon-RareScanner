@@ -25,11 +25,9 @@ local ATLAS_TO_CATEGORY = {
 local function ClassifyAtlas(atlasName)
     if not atlasName then return "npc" end
     local lower = atlasName:lower()
-    -- VignetteLoot and variants
     if lower:find("loot") or lower:find("container") or lower:find("chest") then
         return "container"
     end
-    -- VignetteEvent and variants
     if lower:find("event") then
         return "event"
     end
@@ -37,15 +35,23 @@ local function ClassifyAtlas(atlasName)
 end
 
 --- Return the Focus entry list for the current active RareScanner alert.
---- Returns an empty table when the integration is disabled or no alert is active.
+--- Returns an empty table when the module is disabled, the integration is
+--- toggled off for this entity type, or no alert is active.
 --- @return table
 local function CollectRareScannerEntries()
-    if not RS.GetDB("enabled", true) then return {} end
+    -- Respect the module-level enable toggle (Modules tab in options).
+    if not horizon:IsModuleEnabled("rarescanner") then return {} end
 
     local alert = RS.activeAlert
     if not alert then return {} end
 
     local atlasType = ClassifyAtlas(alert.atlasName)
+
+    -- Respect the per-type toggles from the Integrations options tab.
+    if atlasType == "npc"       and not horizon.GetDB("rs_showRares",     true) then return {} end
+    if atlasType == "container" and not horizon.GetDB("rs_showTreasures", true) then return {} end
+    if atlasType == "event"     and not horizon.GetDB("rs_showEvents",    true) then return {} end
+
     local category  = ATLAS_TO_CATEGORY[atlasType] or "RARE"
     local color     = horizon.GetQuestColor and horizon.GetQuestColor(category)
                       or { r = 1, g = 0.2, b = 0.2 }
