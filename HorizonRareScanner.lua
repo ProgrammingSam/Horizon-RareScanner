@@ -38,9 +38,11 @@ function RS.SetDB(key, value)
 end
 
 -- ============================================================================
--- ACTIVE ALERT STATE
--- The current RareScanner alert being injected into the Focus tracker.
+-- ALERT QUEUE STATE
 -- Populated by HorizonRareScannerEvents and consumed by HorizonRareScannerProvider.
+-- Initialized here so Provider and Module can safely read them before Events loads.
 -- ============================================================================
 
-RS.activeAlert = nil  -- table | nil: { entityID, name, atlasName, category, mapID, x, y, zoneName }
+RS.alertQueue = {}  -- [entityID] = alertData
+RS.alertOrder = {}  -- ordered list of entityIDs (insertion order)
+RS.alertIndex = 0   -- 1-based index into alertOrder for current display

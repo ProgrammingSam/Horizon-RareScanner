@@ -24,19 +24,34 @@ horizon:RegisterModule("rarescanner", {
     end,
 
     OnEnable = function()
-        -- If an alert was already active before the module was enabled, refresh.
-        if RS.activeAlert and horizon.ScheduleRefresh then
+        -- If alerts were already queued before the module was enabled, refresh.
+        if #RS.alertOrder > 0 and horizon.ScheduleRefresh then
             horizon.ScheduleRefresh()
         end
     end,
 
     OnDisable = function()
-        -- Clear any active alert from the tracker immediately.
-        if RS.activeAlert then
-            RS.activeAlert = nil
-        end
+        -- Clear any active alerts from the tracker immediately.
+        RS.alertQueue = {}
+        RS.alertOrder = {}
+        RS.alertIndex = 0
         if horizon.ScheduleRefresh then
             horizon.ScheduleRefresh()
         end
     end,
 })
+
+-- ============================================================================
+-- AUTO-ENABLE
+-- HorizonSuite's ADDON_LOADED enable-pass runs before this companion addon
+-- loads, so "rarescanner" is never in the iteration. We restore the persisted
+-- state here instead: auto-enable on first install, respect explicit disables.
+-- ============================================================================
+
+local db    = _G[horizon.DATABASE]
+local modDb = db and db.modules and db.modules["rarescanner"]
+if modDb and modDb.enabled == false then
+    -- User explicitly disabled the module via the Modules panel — respect it.
+else
+    horizon:EnableModule("rarescanner")
+end

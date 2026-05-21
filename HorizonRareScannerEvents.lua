@@ -16,17 +16,6 @@ if not horizon or not RS then return end
 local RS_BUTTON_NAME = "RARESCANNER_BUTTON"
 
 -- ============================================================================
--- ALERT QUEUE
--- ============================================================================
-
--- alertQueue[entityID] = alertData table
--- alertOrder           = ordered list of entityIDs (insertion order)
--- alertIndex           = 1-based index into alertOrder for current display
-RS.alertQueue = {}
-RS.alertOrder = {}
-RS.alertIndex = 0
-
--- ============================================================================
 -- NAVIGATION
 -- ============================================================================
 
