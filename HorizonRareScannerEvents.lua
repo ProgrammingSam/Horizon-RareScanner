@@ -146,11 +146,20 @@ local function HookScannerButton()
             pcall(horizon.SetRareWaypoint, { title = alert.name, vignetteMapID = alert.mapID, vignetteX = alert.x, vignetteY = alert.y })
         end
 
+        -- Suppress RareScanner's own popup frame while the Focus integration is active.
+        -- SetAlpha(0) keeps the frame "shown" for RS's internal logic (timers, loot bar
+        -- hooks, etc.) while making it invisible and non-interactive to the player.
+        if horizon.GetDB("rs_enabled", true) then
+            self:SetAlpha(0)
+        end
+
         if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
     end)
 
     -- Fired when the user dismisses the alert or its auto-hide timer expires.
     hooksecurefunc(btn, "HideButton", function()
+        -- Restore alpha so the next alert can show normally if the integration is disabled.
+        btn:SetAlpha(1)
         if #RS.alertOrder > 0 then
             RS.alertQueue = {}
             RS.alertOrder = {}
