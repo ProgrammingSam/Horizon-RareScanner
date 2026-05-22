@@ -9,6 +9,14 @@ local RS      = _G.HorizonRareScanner
 if not horizon or not RS then return end
 
 -- ============================================================================
+-- CONSTANTS
+-- ============================================================================
+
+local RS_MIN_LOOT_QUALITY_MIN     = 0
+local RS_MIN_LOOT_QUALITY_MAX     = 5
+local RS_MIN_LOOT_QUALITY_DEFAULT = 2
+
+-- ============================================================================
 -- ENTRY BUILDER
 -- ============================================================================
 
@@ -34,21 +42,47 @@ local function ClassifyAtlas(atlasName)
     return "npc"
 end
 
---- Build objective lines for loot items from the alert's loot table.
---- Returns up to 5 items; silently skips uncached items.
+-- When item data is missing from cache, we request it and listen for the
+-- GET_ITEM_INFO_RECEIVED event to refresh Focus once it arrives.
+local rsItemRefreshFrame
+
+local function EnsureItemRefreshListener()
+    if rsItemRefreshFrame then return end
+    rsItemRefreshFrame = CreateFrame("Frame")
+    rsItemRefreshFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    rsItemRefreshFrame:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
+        rsItemRefreshFrame = nil
+        if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+    end)
+end
+
+--- Return itemIDs from loot filtered to the configured minimum quality,
+--- sorted by quality descending.  Items not yet in the client cache are
+--- requested via RequestLoadItemDataByID; a refresh fires on arrival.
 --- @param loot table  array of itemIDs
---- @return table  array of {text, finished} objective entries
-local function BuildLootObjectives(loot)
-    local objs = {}
+--- @return table  filtered+sorted array of itemIDs
+local function FilterLootByQuality(loot)
+    if not loot or #loot == 0 then return {} end
+    local minQ = math.max(RS_MIN_LOOT_QUALITY_MIN,
+        math.min(RS_MIN_LOOT_QUALITY_MAX,
+            tonumber(horizon.GetDB("rs_minLootQuality", RS_MIN_LOOT_QUALITY_DEFAULT))
+            or RS_MIN_LOOT_QUALITY_DEFAULT))
+    local out = {}
     for _, itemID in ipairs(loot) do
-        if #objs >= 5 then break end
-        local name, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemID)
-        if name then
-            local iconStr = texture and ("|T" .. texture .. ":12:12:0:0|t ") or ""
-            objs[#objs + 1] = { text = iconStr .. name, finished = false }
+        local _, _, quality = C_Item.GetItemInfo(itemID)
+        if quality == nil then
+            -- Item not yet in cache: request it and refresh Focus when it arrives.
+            C_Item.RequestLoadItemDataByID(itemID)
+            EnsureItemRefreshListener()
+        elseif minQ == 0 or quality >= minQ then
+            out[#out + 1] = { id = itemID, q = quality }
         end
     end
-    return objs
+    table.sort(out, function(a, b) return a.q > b.q end)
+    local result = {}
+    for _, item in ipairs(out) do result[#result + 1] = item.id end
+    return result
 end
 
 --- Return the Focus entry list for the current active RareScanner alert.
@@ -82,14 +116,12 @@ local function CollectRareScannerEntries()
     local objectives = {}
 
     if horizon.GetDB("rs_showCoords", true) and alert.x and alert.y then
-        objectives[#objectives + 1] = { text = ("%.1f, %.1f"):format(alert.x * 100, alert.y * 100), finished = false }
+        objectives[#objectives + 1] = { text = ("%.1f, %.1f"):format(alert.x * 100, alert.y * 100), finished = false, noBullet = true }
     end
 
+    local rsLoot = {}
     if horizon.GetDB("rs_showLoot", true) and alert.loot and #alert.loot > 0 then
-        local lootObjs = BuildLootObjectives(alert.loot)
-        for _, obj in ipairs(lootObjs) do
-            objectives[#objectives + 1] = obj
-        end
+        rsLoot = FilterLootByQuality(alert.loot)
     end
 
     return {
@@ -111,8 +143,11 @@ local function CollectRareScannerEntries()
             vignetteY      = alert.y,
             zoneName       = alert.zoneName,
             rsIsNPC        = isNPC,
+            rsAtlasName    = alert.atlasName,
+            rsLoot         = rsLoot,
             rsAlertIndex   = RS.alertIndex,
             rsAlertTotal   = #RS.alertOrder,
+            noEntryNumber  = true,
         },
     }
 end

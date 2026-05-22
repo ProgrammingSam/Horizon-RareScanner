@@ -13,7 +13,10 @@ if not horizon or not RS then return end
 -- CONSTANTS
 -- ============================================================================
 
-local RS_BUTTON_NAME = "RARESCANNER_BUTTON"
+local RS_BUTTON_NAME        = "RARESCANNER_BUTTON"
+local RS_MAX_ALERTS_MIN     = 1
+local RS_MAX_ALERTS_MAX     = 10
+local RS_MAX_ALERTS_DEFAULT = 4
 
 -- ============================================================================
 -- NAVIGATION
@@ -128,6 +131,17 @@ local function HookScannerButton()
             }
             RS.alertOrder[#RS.alertOrder + 1] = entityID
             RS.alertIndex = #RS.alertOrder
+
+            -- FIFO trim: drop oldest entries when queue exceeds the configured limit.
+            local maxAlerts = math.max(RS_MAX_ALERTS_MIN,
+                math.min(RS_MAX_ALERTS_MAX,
+                    horizon.GetDB("rs_maxAlerts", RS_MAX_ALERTS_DEFAULT)))
+            while #RS.alertOrder > maxAlerts do
+                local removed = table.remove(RS.alertOrder, 1)
+                RS.alertQueue[removed] = nil
+                RS.alertIndex = RS.alertIndex - 1
+            end
+            if RS.alertIndex < 1 then RS.alertIndex = 1 end
         end
 
         local alert = RS.alertQueue[RS.alertOrder[RS.alertIndex]]
@@ -138,8 +152,10 @@ local function HookScannerButton()
         -- Suppress RareScanner's own popup frame while the Focus integration is active.
         -- SetAlpha(0) keeps the frame "shown" for RS's internal logic (timers, loot bar
         -- hooks, etc.) while making it invisible and non-interactive to the player.
-        if horizon.GetDB("rs_enabled", true) then
+        if horizon.GetDB("rs_enabled", false) then
             self:SetAlpha(0)
+            -- PlayerModel frames don't inherit parent alpha, suppress explicitly.
+            if self.ModelView then self.ModelView:SetAlpha(0) end
         end
 
         if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
@@ -149,6 +165,7 @@ local function HookScannerButton()
     hooksecurefunc(btn, "HideButton", function()
         -- Restore alpha so the next alert can show normally if the integration is disabled.
         btn:SetAlpha(1)
+        if btn.ModelView then btn.ModelView:SetAlpha(1) end
         if #RS.alertOrder > 0 then
             RS.alertQueue = {}
             RS.alertOrder = {}
