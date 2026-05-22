@@ -145,8 +145,9 @@ local function HookScannerButton()
         end
 
         local alert = RS.alertQueue[RS.alertOrder[RS.alertIndex]]
-        if horizon.GetDB("rs_autoWaypoint", false) and horizon.SetRareWaypoint and alert then
-            pcall(horizon.SetRareWaypoint, { title = alert.name, vignetteMapID = alert.mapID, vignetteX = alert.x, vignetteY = alert.y })
+        local rsModule = horizon.focus and horizon.focus.rs
+        if horizon.GetDB("rs_autoWaypoint", false) and rsModule and rsModule.SetWaypoint and alert then
+            pcall(rsModule.SetWaypoint, { title = alert.name, vignetteMapID = alert.mapID, vignetteX = alert.x, vignetteY = alert.y })
         end
 
         -- Suppress RareScanner's own popup frame while the Focus integration is active.
