@@ -105,12 +105,12 @@ local function CollectRareScannerEntries()
     if atlasType == "container" and not horizon.GetDB("rs_showTreasures", true) then return {} end
     if atlasType == "event"     and not horizon.GetDB("rs_showEvents",    true) then return {} end
 
-    local category  = ATLAS_TO_CATEGORY[atlasType] or "RARE"
-    local color     = horizon.GetQuestColor and horizon.GetQuestColor(category)
-                      or { r = 1, g = 0.2, b = 0.2 }
+    local rsCategory = ATLAS_TO_CATEGORY[atlasType] or "RARE"  -- "RARE" or "RARE_LOOT" (sub-type)
+    local color      = horizon.GetQuestColor and horizon.GetQuestColor("RARESCANNER")
+                       or { r = 1, g = 0.2, b = 0.2 }
 
-    local isRare     = (category == "RARE")
-    local isRareLoot = (category == "RARE_LOOT")
+    local isRare     = (rsCategory == "RARE")
+    local isRareLoot = (rsCategory == "RARE_LOOT")
     local isNPC      = (atlasType == "npc")
 
     local objectives = {}
@@ -131,7 +131,7 @@ local function CollectRareScannerEntries()
             title          = alert.name,
             objectives     = objectives,
             color          = color,
-            category       = category,
+            category       = "RARESCANNER",
             isComplete     = false,
             isSuperTracked = false,
             isNearby       = true,
