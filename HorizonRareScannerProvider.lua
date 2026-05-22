@@ -90,9 +90,6 @@ end
 --- toggled off for this entity type, or no alert is active.
 --- @return table
 local function CollectRareScannerEntries()
-    -- Respect the module-level enable toggle (Modules tab in options).
-    if not horizon:IsModuleEnabled("rarescanner") then return {} end
-    -- Respect the integration-level enable toggle (Integrations tab in options).
     if not horizon.GetDB("rs_enabled", false) then return {} end
 
     if #RS.alertOrder == 0 or RS.alertIndex == 0 then return {} end
