@@ -116,7 +116,7 @@ local function CollectRareScannerEntries()
     local objectives = {}
 
     if horizon.GetDB("rs_showCoords", true) and alert.x and alert.y then
-        objectives[#objectives + 1] = { text = ("%.1f, %.1f"):format(alert.x * 100, alert.y * 100), finished = false, noBullet = true }
+        objectives[#objectives + 1] = { text = ("%.1f, %.1f"):format(alert.x * 100, alert.y * 100), finished = false, noBullet = true, rsCoord = true }
     end
 
     local rsLoot = {}
