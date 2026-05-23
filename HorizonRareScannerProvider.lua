@@ -118,6 +118,13 @@ local function CollectRareScannerEntries()
         objectives[#objectives + 1] = { text = ("%.1f, %.1f"):format(alert.x * 100, alert.y * 100), finished = false, noBullet = true, rsCoord = true }
     end
 
+    if horizon.GetDB("rs_showSeenAgo", true) and alert.seenAt then
+        local text = horizon.FormatTimeAgo and horizon.FormatTimeAgo(alert.seenAt)
+        if text then
+            objectives[#objectives + 1] = { text = text, finished = false, noBullet = true, rareSeenAgo = true }
+        end
+    end
+
     local rsLoot = {}
     if horizon.GetDB("rs_showLoot", true) and alert.loot and #alert.loot > 0 then
         rsLoot = FilterLootByQuality(alert.loot)

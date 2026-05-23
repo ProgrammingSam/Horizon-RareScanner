@@ -79,6 +79,32 @@ end
 -- BUTTON HOOK
 -- ============================================================================
 
+-- ============================================================================
+-- SEEN-AGO TIMER
+-- Fires every 60 s while the queue is non-empty to keep "X ago" text fresh.
+-- ============================================================================
+
+local seenAgoTimerActive = false
+
+local function RunSeenAgoTick()
+    if #RS.alertOrder == 0 then
+        seenAgoTimerActive = false
+        return
+    end
+    if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+    C_Timer.After(60, RunSeenAgoTick)
+end
+
+local function StartSeenAgoTimer()
+    if seenAgoTimerActive then return end
+    seenAgoTimerActive = true
+    C_Timer.After(60, RunSeenAgoTick)
+end
+
+-- ============================================================================
+-- BUTTON HOOK
+-- ============================================================================
+
 local hooked = false
 
 --- Hook ShowButton / HideButton on the RareScanner scanner button.
@@ -109,7 +135,7 @@ local function HookScannerButton()
         end
 
         if existingIdx then
-            -- Update existing alert and navigate to it.
+            -- Update existing alert and navigate to it; preserve original seenAt.
             local alert = RS.alertQueue[entityID]
             alert.name      = name
             alert.atlasName = self.atlasName
@@ -128,9 +154,11 @@ local function HookScannerButton()
                 y         = y,
                 zoneName  = zoneName,
                 loot      = {},
+                seenAt    = GetTime(),
             }
             RS.alertOrder[#RS.alertOrder + 1] = entityID
             RS.alertIndex = #RS.alertOrder
+            StartSeenAgoTimer()
 
             -- FIFO trim: drop oldest entries when queue exceeds the configured limit.
             local maxAlerts = math.max(RS_MAX_ALERTS_MIN,
@@ -171,6 +199,7 @@ local function HookScannerButton()
             RS.alertQueue = {}
             RS.alertOrder = {}
             RS.alertIndex = 0
+            seenAgoTimerActive = false
             if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
         end
     end)
