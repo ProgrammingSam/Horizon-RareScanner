@@ -97,7 +97,8 @@ local function CollectRareScannerEntries()
     local alert    = entityID and RS.alertQueue[entityID]
     if not alert then return {} end
 
-    local atlasType = ClassifyAtlas(alert.atlasName)
+    local atlasType    = ClassifyAtlas(alert.atlasName)
+    local vignetteAtlas = (atlasType == "container") and "VignetteInteract" or "VignetteKillElite"
 
     -- Respect the per-type toggles from the Integrations options tab.
     if atlasType == "npc"       and not horizon.GetDB("rs_showRares",     true) then return {} end
@@ -150,6 +151,7 @@ local function CollectRareScannerEntries()
             zoneName       = alert.zoneName,
             rsIsNPC        = isNPC,
             rsAtlasName    = alert.atlasName,
+            vignetteAtlas  = vignetteAtlas,
             rsLoot         = rsLoot,
             rsAlertIndex   = RS.alertIndex,
             rsAlertTotal   = #RS.alertOrder,
