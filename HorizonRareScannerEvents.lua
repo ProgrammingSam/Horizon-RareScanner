@@ -115,8 +115,13 @@ local function HookScannerButton()
     if not btn then return end
     hooked = true
 
-    -- Fired each time RareScanner pops an alert (including its own navigation).
-    hooksecurefunc(btn, "ShowButton", function(self)
+    -- HookScript fires in the same clean context as RS's Show()/Hide() calls (which come
+    -- from WoW event handlers). Unlike hooksecurefunc on a SecureActionButton method,
+    -- HookScript is registered at the C level by WoW and does not create a C/Lua security
+    -- boundary crossing, so it never introduces taint into the ScheduleRefresh chain.
+
+    -- Fired each time RareScanner pops an alert.
+    btn:HookScript("OnShow", function(self)
         if not RS.GetDB("enabled", true) then return end
 
         local entityID = self.entityID
@@ -178,25 +183,17 @@ local function HookScannerButton()
             pcall(rsModule.SetWaypoint, { title = alert.name, vignetteMapID = alert.mapID, vignetteX = alert.x, vignetteY = alert.y })
         end
 
-        -- Suppress RareScanner's own popup frame while the Focus integration is active.
-        -- SetAlpha(0) keeps the frame "shown" for RS's internal logic (timers, loot bar
-        -- hooks, etc.) while making it invisible and non-interactive to the player.
+        -- Suppress RS's native button visually while the Focus integration is active.
         if horizon.GetDB("rs_enabled", false) then
             self:SetAlpha(0)
-            -- PlayerModel frames don't inherit parent alpha, suppress explicitly.
             if self.ModelView then self.ModelView:SetAlpha(0) end
         end
 
-        -- Break the taint chain before showing layoutDirtyFrame.
-        -- hooksecurefunc on a SecureActionButton method runs in a mixed C/Lua
-        -- security context; calling ScheduleRefresh directly taints layoutDirtyFrame,
-        -- causing ADDON_ACTION_BLOCKED in FullLayout. C_Timer fires in a clean context.
-        C_Timer.After(0, function() if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end end)
+        if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
     end)
 
     -- Fired when the user dismisses the alert or its auto-hide timer expires.
-    hooksecurefunc(btn, "HideButton", function()
-        -- Restore alpha so the next alert can show normally if the integration is disabled.
+    btn:HookScript("OnHide", function()
         btn:SetAlpha(1)
         if btn.ModelView then btn.ModelView:SetAlpha(1) end
         if #RS.alertOrder > 0 then
@@ -204,7 +201,7 @@ local function HookScannerButton()
             RS.alertOrder = {}
             RS.alertIndex = 0
             seenAgoTimerActive = false
-            C_Timer.After(0, function() if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end end)
+            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
         end
     end)
 
@@ -227,7 +224,7 @@ local function HookScannerButton()
                     if id == itemID then return end
                 end
                 loot[#loot + 1] = itemID
-                C_Timer.After(0, function() if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end end)
+                if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
             end)
         end
     end
