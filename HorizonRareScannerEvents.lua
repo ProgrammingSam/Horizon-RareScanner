@@ -187,7 +187,11 @@ local function HookScannerButton()
             if self.ModelView then self.ModelView:SetAlpha(0) end
         end
 
-        if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+        -- Break the taint chain before showing layoutDirtyFrame.
+        -- hooksecurefunc on a SecureActionButton method runs in a mixed C/Lua
+        -- security context; calling ScheduleRefresh directly taints layoutDirtyFrame,
+        -- causing ADDON_ACTION_BLOCKED in FullLayout. C_Timer fires in a clean context.
+        C_Timer.After(0, function() if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end end)
     end)
 
     -- Fired when the user dismisses the alert or its auto-hide timer expires.
@@ -200,7 +204,7 @@ local function HookScannerButton()
             RS.alertOrder = {}
             RS.alertIndex = 0
             seenAgoTimerActive = false
-            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+            C_Timer.After(0, function() if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end end)
         end
     end)
 
@@ -223,7 +227,7 @@ local function HookScannerButton()
                     if id == itemID then return end
                 end
                 loot[#loot + 1] = itemID
-                if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+                C_Timer.After(0, function() if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end end)
             end)
         end
     end
