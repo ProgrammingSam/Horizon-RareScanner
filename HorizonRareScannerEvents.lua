@@ -115,6 +115,10 @@ local function HookScannerButton()
     if not btn then return end
     hooked = true
 
+    -- Expose the frame so Horizon Suite can suppress it directly without
+    -- re-resolving the button name on its own side.
+    RS.alertFrame = btn
+
     -- HookScript fires in the same clean context as RS's Show()/Hide() calls (which come
     -- from WoW event handlers). Unlike hooksecurefunc on a SecureActionButton method,
     -- HookScript is registered at the C level by WoW and does not create a C/Lua security
@@ -183,10 +187,17 @@ local function HookScannerButton()
             pcall(rsModule.SetWaypoint, { title = alert.name, vignetteMapID = alert.mapID, vignetteX = alert.x, vignetteY = alert.y })
         end
 
-        -- Suppress RS's native button visually while the Focus integration is active.
+        -- Suppress the native button while the Focus integration is active.
+        -- ApplyPopupSuppression (registered by Horizon Suite on RS) performs full
+        -- hide + input-blocking, which alpha alone cannot achieve — an alpha-zero
+        -- frame is still hit-testable and will eat clicks over the Focus tracker.
         if horizon.GetDB("rs_enabled", false) then
-            self:SetAlpha(0)
-            if self.ModelView then self.ModelView:SetAlpha(0) end
+            if RS.ApplyPopupSuppression then
+                RS.ApplyPopupSuppression(true)
+            else
+                self:SetAlpha(0)
+                if self.ModelView then self.ModelView:SetAlpha(0) end
+            end
         end
 
         if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
@@ -194,8 +205,12 @@ local function HookScannerButton()
 
     -- Fired when the user dismisses the alert or its auto-hide timer expires.
     btn:HookScript("OnHide", function()
-        btn:SetAlpha(1)
-        if btn.ModelView then btn.ModelView:SetAlpha(1) end
+        if RS.ApplyPopupSuppression then
+            RS.ApplyPopupSuppression(false)
+        else
+            btn:SetAlpha(1)
+            if btn.ModelView then btn.ModelView:SetAlpha(1) end
+        end
         if #RS.alertOrder > 0 then
             RS.alertQueue = {}
             RS.alertOrder = {}
