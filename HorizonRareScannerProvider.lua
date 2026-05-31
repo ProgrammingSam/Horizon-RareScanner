@@ -33,7 +33,8 @@ local ATLAS_TO_CATEGORY = {
 local function ClassifyAtlas(atlasName)
     if not atlasName then return "npc" end
     local lower = atlasName:lower()
-    if lower:find("loot") or lower:find("container") or lower:find("chest") then
+    if lower:find("loot") or lower:find("treasure") or lower:find("container")
+        or lower:find("chest") or lower:find("object") or lower:find("interact") then
         return "container"
     end
     if lower:find("event") then
@@ -98,7 +99,7 @@ local function CollectRareScannerEntries()
     if not alert then return {} end
 
     local atlasType    = ClassifyAtlas(alert.atlasName)
-    local vignetteAtlas = (atlasType == "container") and "VignetteInteract" or "VignetteKillElite"
+    local vignetteAtlas = (atlasType == "container") and "VignetteLoot" or "VignetteKillElite"
 
     -- Respect the per-type toggles from the Integrations options tab.
     if atlasType == "npc"       and not horizon.GetDB("rs_showRares",     true) then return {} end
