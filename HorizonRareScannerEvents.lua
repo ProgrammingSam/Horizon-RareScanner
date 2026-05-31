@@ -106,6 +106,8 @@ end
 -- ============================================================================
 
 local hooked = false
+local suppressingNativePopup = false
+local observedAlertKey
 
 --- Hook ShowButton / HideButton on the RareScanner scanner button.
 --- Safe to call more than once; subsequent calls are no-ops.
@@ -124,13 +126,16 @@ local function HookScannerButton()
     -- HookScript is registered at the C level by WoW and does not create a C/Lua security
     -- boundary crossing, so it never introduces taint into the ScheduleRefresh chain.
 
-    -- Fired each time RareScanner pops an alert.
-    btn:HookScript("OnShow", function(self)
+    local function CaptureShownAlert(self)
         if not RS.GetDB("enabled", true) then return end
 
         local entityID = self.entityID
         local name     = self.name
         if not entityID or not name then return end
+
+        local alertKey = tostring(entityID) .. ":" .. tostring(name) .. ":" .. tostring(self.atlasName or "")
+        if alertKey == observedAlertKey then return end
+        observedAlertKey = alertKey
 
         local mapID    = self.mapID
                          or (C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player"))
@@ -192,19 +197,37 @@ local function HookScannerButton()
         -- hide + input-blocking, which alpha alone cannot achieve — an alpha-zero
         -- frame is still hit-testable and will eat clicks over the Focus tracker.
         if horizon.GetDB("rs_enabled", false) then
+            suppressingNativePopup = true
             if RS.ApplyPopupSuppression then
                 RS.ApplyPopupSuppression(true)
             else
                 self:SetAlpha(0)
                 if self.ModelView then self.ModelView:SetAlpha(0) end
             end
+            C_Timer.After(0, function()
+                suppressingNativePopup = false
+            end)
         end
 
         if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+    end
+
+    -- Fired each time RareScanner pops an alert. OnShow can run before
+    -- RareScanner finishes assigning entityID/name, so capture on the next tick.
+    btn:HookScript("OnShow", function(self)
+        C_Timer.After(0, function()
+            CaptureShownAlert(self)
+        end)
+    end)
+
+    btn:HookScript("OnUpdate", function(self)
+        CaptureShownAlert(self)
     end)
 
     -- Fired when the user dismisses the alert or its auto-hide timer expires.
     btn:HookScript("OnHide", function()
+        if suppressingNativePopup then return end
+        observedAlertKey = nil
         if RS.ApplyPopupSuppression then
             RS.ApplyPopupSuppression(false)
         else
