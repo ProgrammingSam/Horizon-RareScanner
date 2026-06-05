@@ -234,6 +234,13 @@ local function HookScannerButton()
             btn:SetAlpha(1)
             if btn.ModelView then btn.ModelView:SetAlpha(1) end
         end
+        -- When the Focus integration is active, the tracker owns the alert lifecycle.
+        -- Let the auto-hide timer hide the native button without clearing the queue;
+        -- entries are removed explicitly via DismissCurrentAlert (symmetric with SD).
+        if horizon.GetDB("rs_enabled", false) then
+            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+            return
+        end
         if #RS.alertOrder > 0 then
             RS.alertQueue = {}
             RS.alertOrder = {}
@@ -242,6 +249,47 @@ local function HookScannerButton()
             if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
         end
     end)
+
+    -- DisplayMessages fires before InCombatLockdown() check in ShowAlert, so it
+    -- is the earliest point we can capture a new alert — even during combat when
+    -- ShowButton() is deferred and OnShow never fires until combat ends.
+    -- Pre-populating alertOrder here lets the Focus tracker show the entry
+    -- immediately; OnShow updates coords/atlasName once the button actually shows.
+    if btn.DisplayMessages then
+        hooksecurefunc(btn, "DisplayMessages", function(self, entityID, name)
+            if not RS.GetDB("enabled", true) then return end
+            if not entityID or not name then return end
+            -- Skip if already in queue (OnShow may have already added it).
+            for _, eid in ipairs(RS.alertOrder) do
+                if eid == entityID then return end
+            end
+            local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player") or nil
+            RS.alertQueue[entityID] = {
+                entityID  = entityID,
+                name      = name,
+                atlasName = nil, -- unknown at this stage; OnShow updates it
+                mapID     = mapID,
+                x         = nil,
+                y         = nil,
+                zoneName  = nil,
+                loot      = {},
+                seenAt    = GetTime(),
+            }
+            RS.alertOrder[#RS.alertOrder + 1] = entityID
+            RS.alertIndex = #RS.alertOrder
+            StartSeenAgoTimer()
+            local maxAlerts = math.max(RS_MAX_ALERTS_MIN,
+                math.min(RS_MAX_ALERTS_MAX,
+                    horizon.GetDB("rs_maxAlerts", RS_MAX_ALERTS_DEFAULT)))
+            while #RS.alertOrder > maxAlerts do
+                local removed = table.remove(RS.alertOrder, 1)
+                RS.alertQueue[removed] = nil
+                RS.alertIndex = RS.alertIndex - 1
+            end
+            if RS.alertIndex < 1 then RS.alertIndex = 1 end
+            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+        end)
+    end
 
     -- Loot bar hooks: capture item IDs as they load asynchronously.
     local pool = btn.LootBar and btn.LootBar.itemFramesPool
