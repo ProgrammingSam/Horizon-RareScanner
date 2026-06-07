@@ -317,6 +317,38 @@ local function HookScannerButton()
 end
 
 -- ============================================================================
+-- KILL DETECTION
+-- Auto-prune mob alerts when the rare is killed (via combat log).
+-- UNIT_DIED fires for enemies in your combat log, covering kills you or your
+-- group land. The entityID in alertOrder is the npcID (number).
+-- ============================================================================
+
+local killFrame = CreateFrame("Frame")
+killFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+killFrame:SetScript("OnEvent", function()
+    local _, subevent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
+    if subevent ~= "UNIT_DIED" then return end
+    if not destGUID then return end
+    -- Extract npcID from Creature GUID: Creature-0-realmID-serverID-instanceID-npcID-spawnUID
+    local npcID = tonumber(destGUID:match("Creature%-0%-%d+%-%d+%-%d+%-(%d+)%-"))
+    if not npcID then return end
+    for i, entityID in ipairs(RS.alertOrder) do
+        if entityID == npcID then
+            table.remove(RS.alertOrder, i)
+            RS.alertQueue[npcID] = nil
+            if RS.alertIndex > i then
+                RS.alertIndex = RS.alertIndex - 1
+            elseif RS.alertIndex >= i then
+                RS.alertIndex = math.max(0, math.min(RS.alertIndex, #RS.alertOrder))
+            end
+            if #RS.alertOrder == 0 then RS.alertIndex = 0 end
+            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+            return
+        end
+    end
+end)
+
+-- ============================================================================
 -- EVENT FRAME
 -- ============================================================================
 
