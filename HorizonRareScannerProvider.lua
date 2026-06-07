@@ -132,13 +132,16 @@ local function CollectRareScannerEntries()
         rsLoot = FilterLootByQuality(alert.loot)
     end
 
-    -- Kill state: append colored suffix and flag for model desaturation + flash.
+    -- Kill state: flag for model desaturation + flash.
+    -- rareSuffix is stored separately so the renderer can append it AFTER
+    -- FormatLargeNumbersInString / ApplyTextCase, keeping |c color codes intact.
     local title = alert.name
     local rareIsKilled = alert.killedAt ~= nil
     local triggerFlash = false
-    local FLASH_WINDOW = 0.6
+    local rareSuffix = nil
+    local FLASH_WINDOW = 2.0
     if rareIsKilled then
-        title = (title or "") .. " |cffff5533(Killed)|r"
+        rareSuffix = " |cffff5533(Killed)|r"
         triggerFlash = (GetTime() - alert.killedAt) < FLASH_WINDOW
     end
 
@@ -169,6 +172,7 @@ local function CollectRareScannerEntries()
             noEntryNumber  = true,
             rareIsKilled   = rareIsKilled,
             triggerFlash   = triggerFlash,
+            rareSuffix     = rareSuffix,
         },
     }
 end
