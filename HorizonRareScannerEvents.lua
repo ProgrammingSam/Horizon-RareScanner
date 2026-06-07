@@ -319,15 +319,16 @@ end
 
 -- ============================================================================
 -- EVENT FRAME
--- Kill detection uses PARTY_KILL. In TWW the GUID args are "secret strings"
--- (WoW protects combat data in tainted contexts), so we use string.match()
--- rather than the colon-method form — passing a secret string to a C function
--- is allowed; indexing it to find a method is not.
+-- Kill detection uses COMBAT_LOG_EVENT_UNFILTERED + CombatLogGetCurrentEventInfo().
+-- In TWW, PARTY_KILL passes GUIDs as protected "secret strings" that cannot be
+-- used in any way from tainted addon code (not even with C function calls that
+-- involve string conversion). CombatLogGetCurrentEventInfo() is explicitly safe
+-- and returns plain Lua values regardless of taint context.
 -- ============================================================================
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterEvent("PARTY_KILL")
+eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "ADDON_LOADED" then
         -- Try to hook on RareScanner's own ADDON_LOADED, or on ours if RS was
@@ -337,9 +338,9 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
             C_Timer.After(0, HookScannerButton)
         end
 
-    elseif event == "PARTY_KILL" then
-        -- arg1 = attacker GUID, arg2 = target (killed unit) GUID
-        local destGUID = arg2
+    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
+        if subEvent ~= "UNIT_DIED" then return end
         if not destGUID or not RS.alertOrder then return end
         local npcID = tonumber(string.match(destGUID, "Creature%-0%-%d+%-%d+%-%d+%-(%d+)%-"))
         if not npcID then return end
