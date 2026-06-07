@@ -319,16 +319,52 @@ end
 
 -- ============================================================================
 -- EVENT FRAME
--- Kill detection uses COMBAT_LOG_EVENT_UNFILTERED + CombatLogGetCurrentEventInfo().
--- In TWW, PARTY_KILL passes GUIDs as protected "secret strings" that cannot be
--- used in any way from tainted addon code (not even with C function calls that
--- involve string conversion). CombatLogGetCurrentEventInfo() is explicitly safe
--- and returns plain Lua values regardless of taint context.
+-- Kill detection: prefer UNIT_DIED (available in TWW, fires for all nearby
+-- creature deaths, GUID is a plain string). Fall back to
+-- COMBAT_LOG_EVENT_UNFILTERED on older clients where UNIT_DIED is restricted.
+-- PARTY_KILL is explicitly avoided — TWW passes its GUIDs as secret strings
+-- that cannot be read from tainted addon code in any way.
+-- Pattern mirrors SilverDragon's own popup.lua kill-detection logic.
 -- ============================================================================
+
+-- Determine kill event at load time so we register exactly one event.
+local KILL_EVENT = (C_EventUtils and C_EventUtils.IsEventValid
+                    and C_EventUtils.IsEventValid("UNIT_DIED"))
+                   and "UNIT_DIED" or "COMBAT_LOG_EVENT_UNFILTERED"
+
+local function HandleKillGUID(destGUID)
+    -- Guard against secret strings (possible on older TWW builds).
+    if issecretvalue and issecretvalue(destGUID) then return end
+    if not destGUID or not RS.alertOrder then return end
+    local npcID = tonumber(string.match(destGUID, "Creature%-0%-%d+%-%d+%-%d+%-(%d+)%-"))
+    if not npcID then return end
+    local alert = RS.alertQueue[npcID]
+    if alert and not alert.killedAt then
+        alert.killedAt = GetTime()
+        local delay = math.max(1, math.min(60, tonumber(horizon.GetDB("rs_killFadeDelay", 5)) or 5))
+        C_Timer.After(delay, function()
+            for i, entityID in ipairs(RS.alertOrder) do
+                if entityID == npcID then
+                    table.remove(RS.alertOrder, i)
+                    RS.alertQueue[npcID] = nil
+                    if RS.alertIndex > i then
+                        RS.alertIndex = RS.alertIndex - 1
+                    elseif RS.alertIndex >= i then
+                        RS.alertIndex = math.max(0, math.min(RS.alertIndex, #RS.alertOrder))
+                    end
+                    if #RS.alertOrder == 0 then RS.alertIndex = 0 end
+                    break
+                end
+            end
+            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+        end)
+        if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
+    end
+end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+eventFrame:RegisterEvent(KILL_EVENT)
 eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "ADDON_LOADED" then
         -- Try to hook on RareScanner's own ADDON_LOADED, or on ours if RS was
@@ -338,34 +374,14 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
             C_Timer.After(0, HookScannerButton)
         end
 
+    elseif event == "UNIT_DIED" then
+        -- arg2 = GUID of the dead unit (plain string in TWW, not a secret string)
+        HandleKillGUID(arg2)
+
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        -- Fallback path for clients where UNIT_DIED isn't available.
         local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
-        if subEvent ~= "UNIT_DIED" then return end
-        if not destGUID or not RS.alertOrder then return end
-        local npcID = tonumber(string.match(destGUID, "Creature%-0%-%d+%-%d+%-%d+%-(%d+)%-"))
-        if not npcID then return end
-        local alert = RS.alertQueue[npcID]
-        if alert and not alert.killedAt then
-            alert.killedAt = GetTime()
-            local delay = math.max(1, math.min(60, tonumber(horizon.GetDB("rs_killFadeDelay", 5)) or 5))
-            C_Timer.After(delay, function()
-                for i, entityID in ipairs(RS.alertOrder) do
-                    if entityID == npcID then
-                        table.remove(RS.alertOrder, i)
-                        RS.alertQueue[npcID] = nil
-                        if RS.alertIndex > i then
-                            RS.alertIndex = RS.alertIndex - 1
-                        elseif RS.alertIndex >= i then
-                            RS.alertIndex = math.max(0, math.min(RS.alertIndex, #RS.alertOrder))
-                        end
-                        if #RS.alertOrder == 0 then RS.alertIndex = 0 end
-                        break
-                    end
-                end
-                if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
-            end)
-            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
-        end
+        if subEvent == "UNIT_DIED" then HandleKillGUID(destGUID) end
     end
 end)
 
