@@ -315,16 +315,32 @@ local function HookScannerButton()
         end
     end
 
-    -- Kill detection: auto-prune mob alerts when the rare is killed (combat log).
-    -- Registered here (inside HookScannerButton, called from a safe ADDON_LOADED
-    -- context) to avoid ADDON_ACTION_FORBIDDEN on Frame:RegisterEvent.
-    local killFrame = CreateFrame("Frame")
-    killFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    killFrame:SetScript("OnEvent", function()
-        local _, subevent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
-        if subevent ~= "UNIT_DIED" then return end
-        if not destGUID then return end
-        -- Extract npcID from Creature GUID: Creature-0-realmID-serverID-instanceID-npcID-spawnUID
+end
+
+-- ============================================================================
+-- EVENT FRAME
+-- Kill detection uses PARTY_KILL (passes attacker GUID + target GUID), which
+-- lets us extract npcID without parsing the combat log. Registered at module
+-- level on the shared eventFrame — same pattern as ADDON_LOADED — so
+-- RegisterEvent runs in the safe main-chunk initialization context.
+-- ============================================================================
+
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PARTY_KILL")
+eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
+    if event == "ADDON_LOADED" then
+        -- Try to hook on RareScanner's own ADDON_LOADED, or on ours if RS was
+        -- already loaded before this addon (e.g. alphabetical load order).
+        if arg1 == "RareScanner" or arg1 == RS.ADDON_NAME then
+            -- Defer one frame so RareScanner finishes its OnLoad before we hook.
+            C_Timer.After(0, HookScannerButton)
+        end
+
+    elseif event == "PARTY_KILL" then
+        -- arg1 = attacker GUID, arg2 = target (killed unit) GUID
+        local destGUID = arg2
+        if not destGUID or not RS.alertOrder then return end
         local npcID = tonumber(destGUID:match("Creature%-0%-%d+%-%d+%-%d+%-(%d+)%-"))
         if not npcID then return end
         for i, entityID in ipairs(RS.alertOrder) do
@@ -341,21 +357,6 @@ local function HookScannerButton()
                 return
             end
         end
-    end)
-end
-
--- ============================================================================
--- EVENT FRAME
--- ============================================================================
-
-local eventFrame = CreateFrame("Frame")
-eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:SetScript("OnEvent", function(_, _, addonName)
-    -- Try to hook on RareScanner's own ADDON_LOADED, or on ours if RS was
-    -- already loaded before this addon (e.g. alphabetical load order).
-    if addonName == "RareScanner" or addonName == RS.ADDON_NAME then
-        -- Defer one frame so RareScanner finishes its OnLoad before we hook.
-        C_Timer.After(0, HookScannerButton)
     end
 end)
 
