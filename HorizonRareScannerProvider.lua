@@ -132,11 +132,21 @@ local function CollectRareScannerEntries()
         rsLoot = FilterLootByQuality(alert.loot)
     end
 
+    -- Kill state: append colored suffix and flag for model desaturation + flash.
+    local title = alert.name
+    local rareIsKilled = alert.killedAt ~= nil
+    local triggerFlash = false
+    local FLASH_WINDOW = 0.6
+    if rareIsKilled then
+        title = (title or "") .. " |cffff5533(Killed)|r"
+        triggerFlash = (GetTime() - alert.killedAt) < FLASH_WINDOW
+    end
+
     return {
         {
             entryKey       = "rarescanner:" .. tostring(alert.entityID),
             questID        = nil,
-            title          = alert.name,
+            title          = title,
             objectives     = objectives,
             color          = color,
             category       = "RARESCANNER",
@@ -157,6 +167,8 @@ local function CollectRareScannerEntries()
             rsAlertIndex   = RS.alertIndex,
             rsAlertTotal   = #RS.alertOrder,
             noEntryNumber  = true,
+            rareIsKilled   = rareIsKilled,
+            triggerFlash   = triggerFlash,
         },
     }
 end

@@ -343,19 +343,27 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
         if not destGUID or not RS.alertOrder then return end
         local npcID = tonumber(destGUID:match("Creature%-0%-%d+%-%d+%-%d+%-(%d+)%-"))
         if not npcID then return end
-        for i, entityID in ipairs(RS.alertOrder) do
-            if entityID == npcID then
-                table.remove(RS.alertOrder, i)
-                RS.alertQueue[npcID] = nil
-                if RS.alertIndex > i then
-                    RS.alertIndex = RS.alertIndex - 1
-                elseif RS.alertIndex >= i then
-                    RS.alertIndex = math.max(0, math.min(RS.alertIndex, #RS.alertOrder))
+        local alert = RS.alertQueue[npcID]
+        if alert and not alert.killedAt then
+            alert.killedAt = GetTime()
+            local delay = math.max(1, math.min(60, tonumber(horizon.GetDB("rs_killFadeDelay", 5)) or 5))
+            C_Timer.After(delay, function()
+                for i, entityID in ipairs(RS.alertOrder) do
+                    if entityID == npcID then
+                        table.remove(RS.alertOrder, i)
+                        RS.alertQueue[npcID] = nil
+                        if RS.alertIndex > i then
+                            RS.alertIndex = RS.alertIndex - 1
+                        elseif RS.alertIndex >= i then
+                            RS.alertIndex = math.max(0, math.min(RS.alertIndex, #RS.alertOrder))
+                        end
+                        if #RS.alertOrder == 0 then RS.alertIndex = 0 end
+                        break
+                    end
                 end
-                if #RS.alertOrder == 0 then RS.alertIndex = 0 end
                 if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
-                return
-            end
+            end)
+            if horizon.ScheduleRefresh then horizon.ScheduleRefresh() end
         end
     end
 end)
