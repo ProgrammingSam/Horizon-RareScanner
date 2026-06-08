@@ -1,4 +1,4 @@
---[[
+﻿--[[
     Horizon - RareScanner - Events
     Hooks into the RareScanner scanner button (RARESCANNER_BUTTON) once it is
     loaded, tracks an ordered queue of active alerts, and asks HorizonSuite to
@@ -194,7 +194,7 @@ local function HookScannerButton()
 
         -- Suppress the native button while the Focus integration is active.
         -- ApplyPopupSuppression (registered by Horizon Suite on RS) performs full
-        -- hide + input-blocking, which alpha alone cannot achieve — an alpha-zero
+        -- hide + input-blocking, which alpha alone cannot achieve â€” an alpha-zero
         -- frame is still hit-testable and will eat clicks over the Focus tracker.
         if horizon.GetDB("rs_enabled", false) then
             suppressingNativePopup = true
@@ -251,7 +251,7 @@ local function HookScannerButton()
     end)
 
     -- DisplayMessages fires before InCombatLockdown() check in ShowAlert, so it
-    -- is the earliest point we can capture a new alert — even during combat when
+    -- is the earliest point we can capture a new alert â€” even during combat when
     -- ShowButton() is deferred and OnShow never fires until combat ends.
     -- Pre-populating alertOrder here lets the Focus tracker show the entry
     -- immediately; OnShow updates coords/atlasName once the button actually shows.
@@ -322,15 +322,13 @@ end
 -- Kill detection: prefer UNIT_DIED (available in TWW, fires for all nearby
 -- creature deaths, GUID is a plain string). Fall back to
 -- COMBAT_LOG_EVENT_UNFILTERED on older clients where UNIT_DIED is restricted.
--- PARTY_KILL is explicitly avoided — TWW passes its GUIDs as secret strings
+-- PARTY_KILL is explicitly avoided â€” TWW passes its GUIDs as secret strings
 -- that cannot be read from tainted addon code in any way.
 -- Pattern mirrors SilverDragon's own popup.lua kill-detection logic.
 -- ============================================================================
 
--- Determine kill event at load time so we register exactly one event.
-local KILL_EVENT = (C_EventUtils and C_EventUtils.IsEventValid
-                    and C_EventUtils.IsEventValid("UNIT_DIED"))
-                   and "UNIT_DIED" or "COMBAT_LOG_EVENT_UNFILTERED"
+-- Listen to combat-log deaths even when UNIT_DIED is valid; some clients expose UNIT_DIED but do not pass the creature GUID in the expected argument slot.
+local HAS_UNIT_DIED = C_EventUtils and C_EventUtils.IsEventValid and C_EventUtils.IsEventValid("UNIT_DIED")
 
 local function HandleKillGUID(destGUID)
     -- Guard against secret strings (possible on older TWW builds).
@@ -364,7 +362,8 @@ end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterEvent(KILL_EVENT)
+eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+if HAS_UNIT_DIED then eventFrame:RegisterEvent("UNIT_DIED") end
 eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "ADDON_LOADED" then
         -- Try to hook on RareScanner's own ADDON_LOADED, or on ours if RS was
@@ -376,7 +375,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
 
     elseif event == "UNIT_DIED" then
         -- arg2 = GUID of the dead unit (plain string in TWW, not a secret string)
-        HandleKillGUID(arg2)
+        HandleKillGUID(arg2 or arg1)
 
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         -- Fallback path for clients where UNIT_DIED isn't available.
@@ -388,3 +387,4 @@ end)
 -- Safety net: if RareScanner was loaded before us and we missed ADDON_LOADED,
 -- attempt the hook immediately.
 C_Timer.After(0, HookScannerButton)
+
